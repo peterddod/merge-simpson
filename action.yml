@@ -1,0 +1,48 @@
+name: 'Merge Simpson'
+description: 'A zero-config merge queue that manages PRs using labels and standard CI checks.'
+author: 'Peter Dodd'
+inputs:
+  github-token:
+    description: 'GitHub Token'
+    required: true
+  label-queue:
+    description: 'Label for queued PRs'
+    required: false
+    default: 'mq-queue'
+  label-next:
+    description: 'Label for the PR holding the lock'
+    required: false
+    default: 'mq-next'
+  label-priority:
+    description: 'Label for priority PRs'
+    required: false
+    default: 'mq-priority'
+branding:
+  icon: 'git-merge'
+  color: 'yellow'
+runs:
+  using: "composite"
+  steps:
+    - name: Check Active Lock
+      id: check-lock
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        LABEL_NEXT: ${{ inputs.label-next }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+        LABEL_PRIORITY: ${{ inputs.label-priority }}
+      run: ${{ github.action_path }}/src/check-active.sh
+
+    - name: Select Next Candidate
+      id: select-next
+      if: steps.check-lock.outputs.queue_free == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        LABEL_NEXT: ${{ inputs.label-next }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+        LABEL_PRIORITY: ${{ inputs.label-priority }}
+      run: ${{ github.action_path }}/src/select-next.sh
+

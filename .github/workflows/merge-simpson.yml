@@ -1,0 +1,31 @@
+name: Merge Simpson (Controller)
+
+on:
+  pull_request:
+    types: [labeled, synchronized, unlabeled]
+  check_suite:
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: merge_simpson_queue
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+  issues: write
+
+jobs:
+  orchestrator:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Merge Simpson
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
