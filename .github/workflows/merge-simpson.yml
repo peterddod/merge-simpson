@@ -1,8 +1,6 @@
 name: Merge Simpson (Controller)
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     types: [labeled, synchronized, unlabeled]
   check_suite:
