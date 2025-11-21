@@ -26,10 +26,10 @@ fi
 # 3. Oldest First
 WINNER=$(echo "$CANDIDATES" | jq -r "
     map(select(.mergeable != \"CONFLICTING\")) |
-    sort_by(
+    sort_by([
     (.labels | any(.name == \"$LABEL_PRIORITY\")) | not, 
     .createdAt
-    ) | .[0] | .number
+    ]) | .[0] | .number
 ")
 
 if [ "$WINNER" == "null" ]; then
