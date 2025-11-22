@@ -20,20 +20,23 @@ if [ "$COUNT" -eq 0 ]; then
     exit 0
 fi
 
+log "Found $COUNT candidate(s) in queue."
+
 # SELECTION ALGORITHM
 # 1. Must not be CONFLICTING
 # 2. Priority Label First
 # 3. Oldest First
-WINNER=$(echo "$CANDIDATES" | jq -r "
-    map(select(.mergeable != \"CONFLICTING\")) |
+WINNER=$(echo "$CANDIDATES" | jq -r '
+    map(select(.mergeable != "CONFLICTING" and .mergeable != null)) |
     sort_by([
-    (.labels | any(.name == \"$LABEL_PRIORITY\")) | not, 
-    .createdAt
-    ]) | .[0] | .number
-")
+        ((.labels // []) | map(.name) | contains(["'"$LABEL_PRIORITY"'"]) | not),
+        .createdAt
+    ]) |
+    if length > 0 then .[0].number else null end
+')
 
-if [ "$WINNER" == "null" ]; then
-    log "Candidates exist but have merge conflicts. Waiting for user."
+if [ "$WINNER" == "null" ] || [ -z "$WINNER" ]; then
+    log "No eligible candidates (all have conflicts or invalid state). Waiting."
     exit 0
 fi
 
