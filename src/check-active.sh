@@ -50,7 +50,10 @@ else
     RELEVANT_CHECKS=$(echo "$CHECKS_JSON" | jq '[.[] | select(.name | contains("Merge Simpson") | not)]')
     FAILURES=$(echo "$RELEVANT_CHECKS" | jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out")] | length')
     PENDING=$(echo "$RELEVANT_CHECKS" | jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
+    SUCCESS=$(echo "$RELEVANT_CHECKS" | jq '[.[] | select(.conclusion == "success")] | length')
     TOTAL=$(echo "$RELEVANT_CHECKS" | jq 'length')
+
+    log "Check Summary: Total=$TOTAL, Pending=$PENDING, Failures=$FAILURES, Success=$SUCCESS"
 
     if [ "$FAILURES" -gt 0 ]; then
       log "PR #$PR_NUM failed CI. Kicking."
@@ -58,13 +61,22 @@ else
       gh pr edit "$PR_NUM" --repo "$REPO" --remove-label "$LABEL_NEXT,$LABEL_QUEUE"
       QUEUE_FREE="true"
     elif [ "$PENDING" -gt 0 ]; then
-      log "PR #$PR_NUM is still running CI. Waiting."
+      log "PR #$PR_NUM is still running CI ($PENDING pending). Waiting."
       QUEUE_FREE="false"
     elif [ "$TOTAL" -eq 0 ]; then
-      log "PR #$PR_NUM has no checks yet. Waiting for CI to spawn."
-      QUEUE_FREE="false"
+      log "PR #$PR_NUM has no CI checks configured. Proceeding with merge..."
+      if gh pr merge "$PR_NUM" --repo "$REPO" --merge --auto; then
+        log "Merge initiated (no checks required)."
+        gh pr edit "$PR_NUM" --repo "$REPO" --remove-label "$LABEL_NEXT,$LABEL_QUEUE,$LABEL_PRIORITY"
+        QUEUE_FREE="true"
+      else
+        err "Merge failed. Kicking."
+        gh pr comment "$PR_NUM" --repo "$REPO" --body "🚨 **Merge Simpson**: Merge failed. Removing from queue."
+        gh pr edit "$PR_NUM" --repo "$REPO" --remove-label "$LABEL_NEXT,$LABEL_QUEUE"
+        QUEUE_FREE="true"
+      fi
     else
-      log "PR #$PR_NUM passed all checks. Merging..."
+      log "PR #$PR_NUM passed all checks ($SUCCESS/$TOTAL). Merging..."
       if gh pr merge "$PR_NUM" --repo "$REPO" --merge --auto; then
         log "Merge initiated."
         gh pr edit "$PR_NUM" --repo "$REPO" --remove-label "$LABEL_NEXT,$LABEL_QUEUE,$LABEL_PRIORITY"
