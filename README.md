@@ -1,3 +1,5 @@
+![Merge Simpson Banner](./assets/merge-simpson-banner.png)
+
 # Merge Simpson 🍩
 
 **Merge Simpson** is a zero-config, GitHub-native Merge Queue Action. It orchestrates your Pull Requests to ensure they are merged sequentially and safely, preventing broken main branches.
