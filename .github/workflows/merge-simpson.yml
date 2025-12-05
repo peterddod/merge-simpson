@@ -21,10 +21,6 @@ jobs:
   merge-queue:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run Merge Simpson
-        uses: ./
+      - uses: peterddod/merge-simpson@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

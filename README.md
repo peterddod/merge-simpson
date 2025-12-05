@@ -13,7 +13,7 @@ A GitHub-native merge queue that processes PRs sequentially using labels — no 
 5. **Merge** — If all checks pass, the PR is merged and the next candidate is selected
 
 Only one PR is processed at a time. Non-candidate PRs have their workflows cancelled to save resources.
- 
+
 ## Installation
 
 Create `.github/workflows/merge-queue.yml` in your repository:
