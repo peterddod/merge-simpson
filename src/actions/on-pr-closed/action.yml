@@ -1,6 +1,7 @@
 name: 'Merge Simpson - On PR Closed'
-description: 'If the PR is closed, cleanup the labels and choose the next candidate'
+description: 'Handles PR closed events: cleanup labels and choose next candidate'
 author: 'Peter Dodd'
+
 inputs:
   github-token:
     description: 'GitHub Token'
@@ -17,8 +18,24 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Was this PR the candidate?
+    - name: Cleanup labels from this PR
+      id: cleanup-labels
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+      run: ${{ github.action_path }}/../../scripts/pr-cleanup-labels.sh
 
-    - name: Cleanup Labels From This PR
+    - name: Choose next candidate
+      id: choose-candidate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+      run: ${{ github.action_path }}/../../scripts/choose-candidate.sh
 
-    - name: Validate/Fix/Choose Candidate

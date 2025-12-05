@@ -1,6 +1,7 @@
 name: 'Merge Simpson'
 description: 'A zero-config merge queue that manages PRs using labels and standard CI checks.'
 author: 'Peter Dodd'
+
 inputs:
   github-token:
     description: 'GitHub Token'
@@ -17,27 +18,108 @@ inputs:
 branding:
   icon: 'git-merge'
   color: 'yellow'
+
 runs:
   using: "composite"
   steps:
-    - name: On PR Closed
-      id: on-pr-closed
-      if: ${{ github.event.pull_request.state == 'closed' }}
+    # ============================================================
+    # ON PR CLOSED
+    # ============================================================
+    - name: "[On PR Closed] Cleanup labels"
+      if: github.event.pull_request.state == 'closed'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
-      run: ${{ github.action_path }}/src/actions/on-pr-closed/action.yml
+      run: ${{ github.action_path }}/src/scripts/pr-cleanup-labels.sh
 
-    - name: On PR Update
-      id: on-pr-update
-      if: ${{ github.event.pull_request.state != 'closed' }}
+    - name: "[On PR Closed] Choose next candidate"
+      if: github.event.pull_request.state == 'closed'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
-      run: ${{ github.action_path }}/src/actions/on-pr-update/action.yml
+      run: ${{ github.action_path }}/src/scripts/choose-candidate.sh
+
+    # ============================================================
+    # ON PR UPDATE (opened, synchronize, labeled, unlabeled)
+    # ============================================================
+    - name: "[On PR Update] Validate/Fix/Choose candidate"
+      id: validate-fix-choose
+      if: github.event.pull_request.state != 'closed'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+      run: ${{ github.action_path }}/src/scripts/validate-fix-choose-candidate.sh
+
+    - name: "[On PR Update] Check if this PR is candidate"
+      id: is-candidate
+      if: github.event.pull_request.state != 'closed'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+      run: ${{ github.action_path }}/src/scripts/pr-is-candidate.sh
+
+    - name: "[On PR Update] Update branch if needed"
+      id: update-branch
+      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: ${{ github.action_path }}/src/scripts/update-branch.sh
+
+    - name: "[On PR Update] Check if CI passed"
+      id: ci-checks
+      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: ${{ github.action_path }}/src/scripts/ci-checks-passed.sh
+
+    - name: "[On PR Update] Check if PR is mergeable"
+      id: is-mergeable
+      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.ci-checks.outputs.checks_passed == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+      run: ${{ github.action_path }}/src/scripts/pr-is-mergable.sh
+
+    - name: "[On PR Update] Merge PR"
+      id: merge-pr
+      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.is-mergeable.outputs.is_mergeable == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: ${{ github.action_path }}/src/scripts/merge-pr.sh
+
+    - name: "[On PR Update] Choose next candidate after merge"
+      if: github.event.pull_request.state != 'closed' && steps.merge-pr.outputs.merged == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
+      run: ${{ github.action_path }}/src/scripts/choose-candidate.sh
