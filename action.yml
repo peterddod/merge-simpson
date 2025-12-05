@@ -70,6 +70,7 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
       run: ${{ github.action_path }}/src/scripts/pr-is-candidate.sh
 
     - name: "[On PR Update] Update branch if needed"
@@ -101,7 +102,6 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
-        LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/pr-is-mergeable.sh
 
     - name: "[On PR Update] Merge PR"

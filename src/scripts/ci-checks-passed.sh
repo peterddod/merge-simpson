@@ -10,14 +10,24 @@ set -euo pipefail
 
 echo "🔍 Checking CI status for PR #$PR_NUMBER..."
 
+# First, check if there are any required checks configured
+CHECK_COUNT=$(gh pr checks "$PR_NUMBER" --repo "$REPO" --required --json state --jq 'length' 2>/dev/null || echo "0")
+
+if [ "$CHECK_COUNT" -eq 0 ]; then
+    echo "✅ No required checks configured — passing by default"
+    echo "checks_passed=true" >> "$GITHUB_OUTPUT"
+    exit 0
+fi
+
+echo "Found $CHECK_COUNT required check(s)"
+
 # Get the check status - this will fail if checks are pending or failed
-# --required only checks required checks
 if gh pr checks "$PR_NUMBER" --repo "$REPO" --required 2>/dev/null; then
     echo "✅ All required checks have passed"
     echo "checks_passed=true" >> "$GITHUB_OUTPUT"
 else
     # Check if it's because checks are still running (pending)
-    PENDING=$(gh pr checks "$PR_NUMBER" --repo "$REPO" --json state --jq '[.[] | select(.state == "PENDING" or .state == "IN_PROGRESS")] | length' 2>/dev/null || echo "0")
+    PENDING=$(gh pr checks "$PR_NUMBER" --repo "$REPO" --required --json state --jq '[.[] | select(.state == "PENDING" or .state == "IN_PROGRESS")] | length' 2>/dev/null || echo "0")
     
     if [ "$PENDING" -gt 0 ]; then
         echo "⏳ Checks are still running ($PENDING pending). Waiting for completion..."

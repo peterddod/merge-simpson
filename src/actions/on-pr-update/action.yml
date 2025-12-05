@@ -43,6 +43,7 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
       run: ${{ github.action_path }}/../../scripts/pr-is-candidate.sh
 
     # ─────────────────────────────────────────────────────────────
@@ -83,7 +84,6 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
-        LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/../../scripts/pr-is-mergeable.sh
 
     # ─────────────────────────────────────────────────────────────
