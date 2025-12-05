@@ -147,6 +147,7 @@ runs:
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
+        LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/merge-pr.sh
 
     - name: "[On PR Update] Choose next candidate after merge"
