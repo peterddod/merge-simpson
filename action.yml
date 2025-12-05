@@ -102,7 +102,7 @@ runs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
-      run: ${{ github.action_path }}/src/scripts/pr-is-mergable.sh
+      run: ${{ github.action_path }}/src/scripts/pr-is-mergeable.sh
 
     - name: "[On PR Update] Merge PR"
       id: merge-pr
@@ -112,6 +112,7 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
       run: ${{ github.action_path }}/src/scripts/merge-pr.sh
 
     - name: "[On PR Update] Choose next candidate after merge"

@@ -24,8 +24,7 @@ OLDEST_QUEUED=$(gh pr list --repo "$REPO" --label "$LABEL_QUEUE" --state open --
 
 if [ -n "$OLDEST_QUEUED" ]; then
     echo "✅ Assigning '$LABEL_CANDIDATE' to PR #$OLDEST_QUEUED"
-    gh pr edit "$OLDEST_QUEUED" --repo "$REPO" --add-label "$LABEL_CANDIDATE"
+    gh pr edit "$OLDEST_QUEUED" --repo "$REPO" --add-label "$LABEL_CANDIDATE" 2>/dev/null || true
 else
     echo "📭 No queued PRs found. Queue is empty."
 fi
-

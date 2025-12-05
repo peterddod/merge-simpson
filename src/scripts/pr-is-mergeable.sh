@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# pr-is-mergable.sh
+# pr-is-mergeable.sh
 # Checks if the PR is mergeable (checks passed, approved, no conflicts).
 # If not mergeable, removes candidate label.
 # Sets output: is_mergeable=true/false
@@ -41,6 +41,11 @@ if [ "$MERGE_STATE" = "BLOCKED" ]; then
     REASON="PR is blocked by branch protection rules"
 fi
 
+if [ "$MERGE_STATE" = "UNSTABLE" ]; then
+    IS_MERGEABLE=false
+    REASON="PR has failing checks"
+fi
+
 # Note: We don't check reviewDecision here as it depends on repo settings
 # The merge will fail if reviews are required and not met
 
@@ -50,7 +55,7 @@ if [ "$IS_MERGEABLE" = true ]; then
 else
     echo "❌ PR #$PR_NUMBER is NOT mergeable: $REASON"
     echo "🏷️  Removing candidate label..."
-    gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$LABEL_CANDIDATE" || true
+    gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label "$LABEL_CANDIDATE" 2>/dev/null || true
     echo "is_mergeable=false" >> "$GITHUB_OUTPUT"
 fi
 

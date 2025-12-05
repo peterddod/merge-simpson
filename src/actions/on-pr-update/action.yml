@@ -84,7 +84,7 @@ runs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
-      run: ${{ github.action_path }}/../../scripts/pr-is-mergable.sh
+      run: ${{ github.action_path }}/../../scripts/pr-is-mergeable.sh
 
     # ─────────────────────────────────────────────────────────────
     # Step 6: Merge the PR (only if mergeable)
@@ -97,6 +97,7 @@ runs:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
       run: ${{ github.action_path }}/../../scripts/merge-pr.sh
 
     # ─────────────────────────────────────────────────────────────

@@ -9,24 +9,24 @@ set -euo pipefail
 
 echo "🔍 Validating candidate labels..."
 
-# Get all open PRs with candidate label
-CANDIDATE_PRS=$(gh pr list --repo "$REPO" --label "$LABEL_CANDIDATE" --state open --json number --jq '.[].number' | tr '\n' ' ')
-CANDIDATE_COUNT=$(echo "$CANDIDATE_PRS" | wc -w | tr -d ' ')
+# Get all open PRs with candidate label (sorted by createdAt)
+CANDIDATE_DATA=$(gh pr list --repo "$REPO" --label "$LABEL_CANDIDATE" --state open --json number,createdAt)
+CANDIDATE_COUNT=$(echo "$CANDIDATE_DATA" | jq 'length')
 
-echo "Found $CANDIDATE_COUNT PR(s) with '$LABEL_CANDIDATE' label: $CANDIDATE_PRS"
+echo "Found $CANDIDATE_COUNT PR(s) with '$LABEL_CANDIDATE' label"
 
 if [ "$CANDIDATE_COUNT" -gt 1 ]; then
     echo "⚠️  Multiple candidates found. Fixing..."
     
-    # Keep only the oldest candidate (first PR number when sorted ascending)
-    OLDEST_CANDIDATE=$(echo "$CANDIDATE_PRS" | tr ' ' '\n' | grep -v '^$' | sort -n | head -1)
-    echo "Keeping PR #$OLDEST_CANDIDATE as candidate"
+    # Keep only the oldest candidate (by createdAt, not PR number)
+    OLDEST_CANDIDATE=$(echo "$CANDIDATE_DATA" | jq -r 'sort_by(.createdAt) | .[0].number')
+    echo "Keeping PR #$OLDEST_CANDIDATE as candidate (oldest by creation date)"
     
     # Remove candidate label from all others
-    for PR in $CANDIDATE_PRS; do
+    for PR in $(echo "$CANDIDATE_DATA" | jq -r '.[].number'); do
         if [ "$PR" != "$OLDEST_CANDIDATE" ]; then
             echo "Removing '$LABEL_CANDIDATE' from PR #$PR"
-            gh pr edit "$PR" --repo "$REPO" --remove-label "$LABEL_CANDIDATE" || true
+            gh pr edit "$PR" --repo "$REPO" --remove-label "$LABEL_CANDIDATE" 2>/dev/null || true
         fi
     done
     
@@ -38,11 +38,10 @@ elif [ "$CANDIDATE_COUNT" -eq 0 ]; then
     
     if [ -n "$OLDEST_QUEUED" ]; then
         echo "✅ Assigning '$LABEL_CANDIDATE' to PR #$OLDEST_QUEUED"
-        gh pr edit "$OLDEST_QUEUED" --repo "$REPO" --add-label "$LABEL_CANDIDATE"
+        gh pr edit "$OLDEST_QUEUED" --repo "$REPO" --add-label "$LABEL_CANDIDATE" 2>/dev/null || true
     else
         echo "📭 No queued PRs found. Nothing to do."
     fi
 else
     echo "✅ Exactly one candidate exists. Labels are valid."
 fi
-
