@@ -17,4 +17,14 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Validate/Fix Labels Across Repo
 
+    - name: Check If This PR Is The Candidate
+
+    - name: Update Branch
+
+    - name: CI Checks Passed?
+
+    - name: Is PR Mergable?
+
+    - name: Merge PR
