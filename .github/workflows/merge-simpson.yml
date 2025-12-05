@@ -27,4 +27,4 @@ jobs:
       - name: Run Merge Simpson
         uses: ./
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }} 
