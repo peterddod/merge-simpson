@@ -23,21 +23,55 @@ runs:
   using: "composite"
   steps:
     # ============================================================
+    # DETERMINE PR NUMBER (handle different event types)
+    # ============================================================
+    - name: "Get PR number from event"
+      id: get-pr
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_NUMBER_FROM_PR: ${{ github.event.pull_request.number }}
+        PR_NUMBER_FROM_WORKFLOW_RUN: ${{ github.event.workflow_run.pull_requests[0].number }}
+        PR_STATE_FROM_PR: ${{ github.event.pull_request.state }}
+        WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      run: |
+        if [ "$EVENT_NAME" = "pull_request" ]; then
+          echo "pr_number=$PR_NUMBER_FROM_PR" >> "$GITHUB_OUTPUT"
+          echo "pr_state=$PR_STATE_FROM_PR" >> "$GITHUB_OUTPUT"
+          echo "📋 Event: pull_request, PR #$PR_NUMBER_FROM_PR, State: $PR_STATE_FROM_PR"
+        elif [ "$EVENT_NAME" = "workflow_run" ]; then
+          if [ -z "$PR_NUMBER_FROM_WORKFLOW_RUN" ]; then
+            echo "⏭️  workflow_run event not associated with a PR. Skipping."
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
+            echo "pr_state=" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_number=$PR_NUMBER_FROM_WORKFLOW_RUN" >> "$GITHUB_OUTPUT"
+            echo "pr_state=open" >> "$GITHUB_OUTPUT"
+            echo "📋 Event: workflow_run, PR #$PR_NUMBER_FROM_WORKFLOW_RUN, Conclusion: $WORKFLOW_RUN_CONCLUSION"
+          fi
+        else
+          echo "❓ Unhandled event type: $EVENT_NAME"
+          echo "pr_number=" >> "$GITHUB_OUTPUT"
+          echo "pr_state=" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ============================================================
     # ON PR CLOSED
     # ============================================================
     - name: "[On PR Closed] Cleanup labels"
-      if: github.event.pull_request.state == 'closed'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state == 'closed'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/pr-cleanup-labels.sh
 
     - name: "[On PR Closed] Choose next candidate"
-      if: github.event.pull_request.state == 'closed'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state == 'closed'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
@@ -47,76 +81,76 @@ runs:
       run: ${{ github.action_path }}/src/scripts/choose-candidate.sh
 
     # ============================================================
-    # ON PR UPDATE (opened, synchronize, labeled, unlabeled)
+    # ON PR UPDATE (opened, synchronize, labeled, unlabeled, workflow_run)
     # ============================================================
     - name: "[On PR Update] Validate/Fix/Choose candidate"
       id: validate-fix-choose
-      if: github.event.pull_request.state != 'closed'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/validate-fix-choose-candidate.sh
 
     - name: "[On PR Update] Check if this PR is candidate"
       id: is-candidate
-      if: github.event.pull_request.state != 'closed'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         GITHUB_RUN_ID: ${{ github.run_id }}
       run: ${{ github.action_path }}/src/scripts/pr-is-candidate.sh
 
     - name: "[On PR Update] Update branch if needed"
       id: update-branch
-      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
       run: ${{ github.action_path }}/src/scripts/update-branch.sh
 
     - name: "[On PR Update] Check if CI passed"
       id: ci-checks
-      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
       run: ${{ github.action_path }}/src/scripts/ci-checks-passed.sh
 
     - name: "[On PR Update] Check if PR is mergeable"
       id: is-mergeable
-      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.ci-checks.outputs.checks_passed == 'true'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.ci-checks.outputs.checks_passed == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
       run: ${{ github.action_path }}/src/scripts/pr-is-mergeable.sh
 
     - name: "[On PR Update] Merge PR"
       id: merge-pr
-      if: github.event.pull_request.state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.is-mergeable.outputs.is_mergeable == 'true'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.is-mergeable.outputs.is_mergeable == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
       run: ${{ github.action_path }}/src/scripts/merge-pr.sh
 
     - name: "[On PR Update] Choose next candidate after merge"
-      if: github.event.pull_request.state != 'closed' && steps.merge-pr.outputs.merged == 'true'
+      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.merge-pr.outputs.merged == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
