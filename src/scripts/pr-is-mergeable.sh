@@ -32,16 +32,17 @@ if [ "$MERGE_STATE" = "DIRTY" ]; then
 elif [ "$MERGE_STATE" = "BLOCKED" ]; then
     IS_MERGEABLE=false
     REASON="PR is blocked by branch protection rules"
-elif [ "$MERGE_STATE" = "UNSTABLE" ]; then
-    IS_MERGEABLE=false
-    REASON="PR has failing checks"
 elif [ "$MERGEABLE" != "MERGEABLE" ]; then
     IS_MERGEABLE=false
     REASON="PR is not mergeable ($MERGEABLE)"
 fi
 
-# Note: We don't check reviewDecision here as it depends on repo settings
-# The merge will fail if reviews are required and not met
+# Note: We don't check UNSTABLE here because:
+# 1. ci-checks-passed.sh already verified required checks passed
+# 2. UNSTABLE can be triggered by the merge queue workflow itself still running
+#
+# We also don't check reviewDecision here as it depends on repo settings.
+# The merge will fail if reviews are required and not met.
 
 if [ "$IS_MERGEABLE" = true ]; then
     echo "✅ PR #$PR_NUMBER is mergeable"
