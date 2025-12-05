@@ -21,6 +21,4 @@ runs:
 
     - name: Cleanup Labels From This PR
 
-    - name: Validate Labels Across Repo
-
-    - name: Choose Next Candidate
+    - name: Validate/Fix/Choose Candidate
