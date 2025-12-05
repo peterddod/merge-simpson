@@ -9,40 +9,35 @@ inputs:
     description: 'Label for queued PRs'
     required: false
     default: 'mq-queue'
-  label-next:
-    description: 'Label for the PR holding the lock'
+  label-candidate:
+    description: 'Label for the PR candidate used internally'
     required: false
-    default: 'mq-next'
-  label-priority:
-    description: 'Label for priority PRs'
-    required: false
-    default: 'mq-priority'
+    default: 'mq-candidate'
+
 branding:
   icon: 'git-merge'
   color: 'yellow'
 runs:
   using: "composite"
   steps:
-    - name: Check Active Lock
-      id: check-lock
+    - name: On PR Closed
+      id: on-pr-closed
+      if: ${{ github.event.pull_request.state == 'closed' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        LABEL_NEXT: ${{ inputs.label-next }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
-        LABEL_PRIORITY: ${{ inputs.label-priority }}
-      run: ${{ github.action_path }}/src/check-active.sh
+      run: ${{ github.action_path }}/src/actions/on-pr-closed/action.yml
 
-    - name: Select Next Candidate
-      id: select-next
-      if: steps.check-lock.outputs.queue_free == 'true'
+    - name: On PR Update
+      id: on-pr-update
+      if: ${{ github.event.pull_request.state != 'closed' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        LABEL_NEXT: ${{ inputs.label-next }}
+        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
-        LABEL_PRIORITY: ${{ inputs.label-priority }}
-      run: ${{ github.action_path }}/src/select-next.sh
-
+      run: ${{ github.action_path }}/src/actions/on-pr-update/action.yml

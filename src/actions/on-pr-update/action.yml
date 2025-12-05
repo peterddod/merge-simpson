@@ -1,0 +1,20 @@
+name: 'Merge Simpson - On PR Update'
+description: 'Runs when a PR is opened, labeled, or synchronized. Handles the merge logic.'
+author: 'Peter Dodd'
+inputs:
+  github-token:
+    description: 'GitHub Token'
+    required: true
+  label-queue:
+    description: 'Label for queued PRs'
+    required: false
+    default: 'mq-queue'
+  label-candidate:
+    description: 'Label for the PR candidate used internally'
+    required: false
+    default: 'mq-candidate'
+
+runs:
+  using: "composite"
+  steps:
+
