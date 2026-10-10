@@ -11,8 +11,16 @@ set -euo pipefail
 echo "🔄 Checking if PR #$PR_NUMBER needs to be updated..."
 
 # Check if the PR branch is behind the base branch
-MERGE_STATE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
+PR_DATA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus,baseRefName,headRefOid)
+MERGE_STATE=$(echo "$PR_DATA" | jq -r '.mergeStateStatus')
+BASE_REF=$(echo "$PR_DATA" | jq -r '.baseRefName')
+HEAD_SHA=$(echo "$PR_DATA" | jq -r '.headRefOid')
 echo "Current merge state: $MERGE_STATE"
+
+# GitHub only reports BEHIND when branch protection requires branches to be
+# up to date, so ask the compare API how far behind the base the head is.
+BEHIND_BY=$(gh api "repos/$REPO/compare/${BASE_REF}...${HEAD_SHA}" --jq '.behind_by')
+echo "Commits behind $BASE_REF: $BEHIND_BY"
 
 # Check if branch is behind (needs update)
 # BEHIND = branch is behind base, needs update
@@ -22,7 +30,7 @@ echo "Current merge state: $MERGE_STATE"
 # UNSTABLE = checks failing
 # HAS_HOOKS = has pre-merge hooks
 
-if [ "$MERGE_STATE" = "BEHIND" ]; then
+if [ "$MERGE_STATE" = "BEHIND" ] || [ "$BEHIND_BY" -gt 0 ]; then
     echo "📥 Branch is behind. Updating with base branch..."
     
     if gh pr update-branch "$PR_NUMBER" --repo "$REPO"; then

@@ -6,6 +6,10 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
+  workflow_dispatch:
+  schedule:
+    # Backstop for stalls: drive the current candidate even if no event arrives
+    - cron: '*/10 * * * *'
 
 concurrency:
   group: merge-queue
@@ -20,11 +24,23 @@ permissions:
 jobs:
   merge-queue:
     runs-on: ubuntu-latest
+    env:
+      HAS_APP: ${{ secrets.MERGE_SIMPSON_APP_CLIENT_ID != '' && secrets.MERGE_SIMPSON_APP_PRIVATE_KEY != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Events caused by GITHUB_TOKEN don't trigger workflows, so writes use a
+      # GitHub App token. Falls back to GITHUB_TOKEN (with a warning) if unset.
+      - name: Create GitHub App token
+        id: app-token
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.MERGE_SIMPSON_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MERGE_SIMPSON_APP_PRIVATE_KEY }}
+
       - name: Run Merge Simpson
         uses: ./
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }} 
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
