@@ -160,6 +160,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
+        MERGED_PR: ${{ steps.candidate.outputs.candidate }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/choose-candidate.sh
