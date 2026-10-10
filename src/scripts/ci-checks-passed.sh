@@ -24,9 +24,10 @@ if [ "$CHECK_COUNT" -eq 0 ]; then
     PENDING=$(echo "$OTHER_CHECKS" | jq '[.[] | select(.bucket == "pending")] | length')
 
     # Workflow runs that are queued or awaiting approval report no checks yet, so count them too
+    # (latest run per workflow; gh lists newest first)
     HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
     OTHER_RUNS=$(gh run list --repo "$REPO" --commit "$HEAD_SHA" --json workflowName,status,conclusion \
-        | jq --arg self "$GITHUB_WORKFLOW" '[.[] | select(.workflowName != $self)]')
+        | jq --arg self "$GITHUB_WORKFLOW" '[.[] | select(.workflowName != $self)] | group_by(.workflowName) | map(.[0])')
     FAILED=$((FAILED + $(echo "$OTHER_RUNS" | jq '[.[] | select(.status == "completed" and (.conclusion | IN("failure", "cancelled", "timed_out", "startup_failure")))] | length')))
     PENDING=$((PENDING + $(echo "$OTHER_RUNS" | jq '[.[] | select(.status != "completed" or .conclusion == "action_required")] | length')))
     TOTAL=$((TOTAL + $(echo "$OTHER_RUNS" | jq 'length')))
