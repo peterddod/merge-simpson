@@ -4,8 +4,13 @@ author: 'Peter Dodd'
 
 inputs:
   github-token:
-    description: 'GitHub Token'
-    required: true
+    description: >-
+      Token used for all writes (update branch, labels, merge). Use a GitHub App
+      installation token or a fine-grained PAT: events caused by the default
+      GITHUB_TOKEN do not trigger workflows, so branch updates get no CI and a
+      promoted candidate is never woken up. Defaults to GITHUB_TOKEN, with a warning.
+    required: false
+    default: ${{ github.token }}
   label-queue:
     description: 'Label for queued PRs'
     required: false
@@ -25,6 +30,12 @@ runs:
     # ============================================================
     # DETERMINE PR NUMBER (handle different event types)
     # ============================================================
+    - name: "Check token"
+      if: inputs.github-token == github.token
+      shell: bash
+      run: |
+        echo "::warning title=Merge Simpson::Running with the default GITHUB_TOKEN. Events it causes do not trigger workflows, so updated branches get no CI and newly promoted candidates are only picked up by the next event or scheduled run. Pass a GitHub App token or fine-grained PAT as 'github-token'."
+
     - name: "Get PR number from event"
       id: get-pr
       shell: bash
@@ -42,7 +53,7 @@ runs:
           echo "📋 Event: pull_request, PR #$PR_NUMBER_FROM_PR, State: $PR_STATE_FROM_PR"
         elif [ "$EVENT_NAME" = "workflow_run" ]; then
           if [ -z "$PR_NUMBER_FROM_WORKFLOW_RUN" ]; then
-            echo "⏭️  workflow_run event not associated with a PR. Skipping."
+            echo "📋 Event: workflow_run, not associated with a PR. Driving the queue."
             echo "pr_number=" >> "$GITHUB_OUTPUT"
             echo "pr_state=" >> "$GITHUB_OUTPUT"
           else
@@ -51,7 +62,7 @@ runs:
             echo "📋 Event: workflow_run, PR #$PR_NUMBER_FROM_WORKFLOW_RUN, Conclusion: $WORKFLOW_RUN_CONCLUSION"
           fi
         else
-          echo "❓ Unhandled event type: $EVENT_NAME"
+          echo "📋 Event: $EVENT_NAME, no triggering PR. Driving the queue."
           echo "pr_number=" >> "$GITHUB_OUTPUT"
           echo "pr_state=" >> "$GITHUB_OUTPUT"
         fi
@@ -70,33 +81,23 @@ runs:
         LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/pr-cleanup-labels.sh
 
-    - name: "[On PR Closed] Choose next candidate"
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state == 'closed'
+    # ============================================================
+    # CHOOSE CANDIDATE (every event, whichever PR triggered the run)
+    # ============================================================
+    - name: "Validate/Fix/Choose candidate"
+      id: candidate
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        LABEL_CANDIDATE: ${{ inputs.label-candidate }}
-        LABEL_QUEUE: ${{ inputs.label-queue }}
-      run: ${{ github.action_path }}/src/scripts/choose-candidate.sh
-
-    # ============================================================
-    # ON PR UPDATE (opened, synchronize, labeled, unlabeled, workflow_run)
-    # ============================================================
-    - name: "[On PR Update] Validate/Fix/Choose candidate"
-      id: validate-fix-choose
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-        REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/validate-fix-choose-candidate.sh
 
-    - name: "[On PR Update] Check if this PR is candidate"
-      id: is-candidate
+    # ============================================================
+    # ON PR UPDATE (opened, synchronize, labeled, unlabeled, workflow_run)
+    # ============================================================
+    - name: "[On PR Update] Cancel workflows if this PR is not the candidate"
       if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed'
       shell: bash
       env:
@@ -107,51 +108,54 @@ runs:
         GITHUB_RUN_ID: ${{ github.run_id }}
       run: ${{ github.action_path }}/src/scripts/pr-is-candidate.sh
 
-    - name: "[On PR Update] Update branch if needed"
+    # ============================================================
+    # DRIVE THE CANDIDATE (every event: update, wait for CI, merge)
+    # ============================================================
+    - name: "Update candidate branch if needed"
       id: update-branch
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true'
+      if: steps.candidate.outputs.candidate != ''
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
+        PR_NUMBER: ${{ steps.candidate.outputs.candidate }}
       run: ${{ github.action_path }}/src/scripts/update-branch.sh
 
-    - name: "[On PR Update] Check if CI passed"
+    - name: "Check if candidate CI passed"
       id: ci-checks
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true'
+      if: steps.candidate.outputs.candidate != '' && steps.update-branch.outputs.updated != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
+        PR_NUMBER: ${{ steps.candidate.outputs.candidate }}
       run: ${{ github.action_path }}/src/scripts/ci-checks-passed.sh
 
-    - name: "[On PR Update] Check if PR is mergeable"
+    - name: "Check if candidate is mergeable"
       id: is-mergeable
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.ci-checks.outputs.checks_passed == 'true'
+      if: steps.candidate.outputs.candidate != '' && steps.update-branch.outputs.updated != 'true' && steps.ci-checks.outputs.checks_passed == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
+        PR_NUMBER: ${{ steps.candidate.outputs.candidate }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
       run: ${{ github.action_path }}/src/scripts/pr-is-mergeable.sh
 
-    - name: "[On PR Update] Merge PR"
+    - name: "Merge candidate"
       id: merge-pr
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.is-candidate.outputs.is_candidate == 'true' && steps.update-branch.outputs.updated != 'true' && steps.is-mergeable.outputs.is_mergeable == 'true'
+      if: steps.candidate.outputs.candidate != '' && steps.update-branch.outputs.updated != 'true' && steps.is-mergeable.outputs.is_mergeable == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.get-pr.outputs.pr_number }}
+        PR_NUMBER: ${{ steps.candidate.outputs.candidate }}
         LABEL_CANDIDATE: ${{ inputs.label-candidate }}
         LABEL_QUEUE: ${{ inputs.label-queue }}
       run: ${{ github.action_path }}/src/scripts/merge-pr.sh
 
-    - name: "[On PR Update] Choose next candidate after merge"
-      if: steps.get-pr.outputs.pr_number != '' && steps.get-pr.outputs.pr_state != 'closed' && steps.merge-pr.outputs.merged == 'true'
+    - name: "Choose next candidate after merge"
+      if: steps.merge-pr.outputs.merged == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
