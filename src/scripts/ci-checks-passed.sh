@@ -23,6 +23,14 @@ if [ "$CHECK_COUNT" -eq 0 ]; then
     FAILED=$(echo "$OTHER_CHECKS" | jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length')
     PENDING=$(echo "$OTHER_CHECKS" | jq '[.[] | select(.bucket == "pending")] | length')
 
+    # Workflow runs that are queued or awaiting approval report no checks yet, so count them too
+    HEAD_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+    OTHER_RUNS=$(gh run list --repo "$REPO" --commit "$HEAD_SHA" --json workflowName,status,conclusion \
+        | jq --arg self "$GITHUB_WORKFLOW" '[.[] | select(.workflowName != $self)]')
+    FAILED=$((FAILED + $(echo "$OTHER_RUNS" | jq '[.[] | select(.status == "completed" and (.conclusion | IN("failure", "cancelled", "timed_out", "startup_failure")))] | length')))
+    PENDING=$((PENDING + $(echo "$OTHER_RUNS" | jq '[.[] | select(.status != "completed" or .conclusion == "action_required")] | length')))
+    TOTAL=$((TOTAL + $(echo "$OTHER_RUNS" | jq 'length')))
+
     if [ "$TOTAL" -eq 0 ]; then
         echo "⏳ No checks reported yet. Waiting for CI to start..."
         echo "checks_passed=false" >> "$GITHUB_OUTPUT"
@@ -33,7 +41,7 @@ if [ "$CHECK_COUNT" -eq 0 ]; then
         echo "⏳ Checks are still running ($PENDING pending). Waiting for completion..."
         echo "checks_passed=false" >> "$GITHUB_OUTPUT"
     else
-        echo "✅ All $TOTAL check(s) have passed"
+        echo "✅ All checks and workflow runs have passed ($TOTAL)"
         echo "checks_passed=true" >> "$GITHUB_OUTPUT"
     fi
     exit 0
